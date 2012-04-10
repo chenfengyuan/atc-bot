@@ -1,7 +1,7 @@
 (declaim (optimize (debug 3)))
 
 (defpackage :cfy.atc-bot
-  (:use :cl :cl-ppcre :cl-speedy-queue))
+  (:use :cl :cl-ppcre))
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
 (defparameter *max-time* 100)
@@ -90,10 +90,10 @@
 			    (= 0 (logand (ash 1 (+ a deta-a)) (aref *map2* (+ x deta-x) (+ y deta-y) time)))
 			    t))))
       t))
-(defun map2-set (x y a)
-  (setf (aref *map2* x y) (logior (aref *map2* x y) (ash 1 a))))
-(defun map2-clr (x y a)
-  (setf (aref *map2* x y) (logand (aref *map2* x y) (lognot (ash 1 a)))))
+(defun map2-set (x y a time)
+  (setf (aref *map2* x y time) (logior (aref *map2* x y time) (ash 1 a))))
+(defun map2-clr (x y a time)
+  (setf (aref *map2* x y time) (logand (aref *map2* x y time) (lognot (ash 1 a)))))
 (defun dir->num (d)
   (ecase d
     (w 0)
@@ -185,78 +185,20 @@
 			      finally (return p))
 		   until p
 		   finally (return p)))))))
-;; (defun _dfs (x y a path dst_n dst_t fuel old-dir)
-;;   (if (< fuel 0)
-;;       nil
-;;       (let ((point (aref *map* x y))
-;; 	    (path (append path (list (list x y a)))))
-;;   	(if (and (listp point)
-;;   		 (eq (car point) dst_t)
-;;   		 (eq (cadr point) dst_n)
-;;   		 (or (and (eq dst_t 'exit)
-;; 			  (= a 9))
-;; 		     (and (eq dst_t 'airport)
-;; 			  (= a 1)
-;; 			  ;; (= (caddr point) old-dir)
-;; 			  )))
-;; 	    path
-;; 	    (if (= fuel 0)
-;; 		nil
-;; 		(loop
-;; 		   for deta-a in (best-a dst_t a)
-;; 		   for p = (loop
-;; 			      with p = nil
-;; 			      for i in (best-dir dst_n dst_t x y)
-;; 			      for d = (elt *dir* i)
-;; 			      for deta-x = (car d)
-;; 			      for deta-y = (cadr d)
-;; 			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) i))
-;; 			      do (map2-set (+ x deta-x) (+ y deta-y) (+ a deta-a)) and
-;; 			      do (setf p (dfs (+ x deta-x) (+ y deta-y) (+ a deta-a) path dst_n dst_t (1- fuel) i) ) and
-;; 			      do (map2-clr (+ x deta-x) (+ y deta-y) (+ a deta-a))
-;; 			      until p
-;; 			      finally (return p))
-;; 		   until p
-;; 		   finally (return p)))))))
 
-(defun search-dfs (maps x y a dst_n dst_t fuel d)
-  (setf *map* (car maps)
-	*map2* (cadr maps))
-  (dfs x y a nil dst_n dst_t fuel d 0))
-
-;; (defun _search-dfs (maps x y a dst_n dst_t fuel d)
-;;   (setf *map* (car maps)
-;; 	*map2* (cadr maps))
-;;   (let (p)
-;;     (map2-set x y a)
-;;     (setf p (dfs x y a nil dst_n dst_t fuel d))
-;;     (map2-clr x y a)
-;;     p))
-
-;; (defun reach-p (x y a dst_n dst_t d)
-;;   (let ((point (aref *map* x y)))
-;;     (and (listp point)
-;; 	 (eq (car point) dst_t)
-;; 	 (eq (cadr point) dst_n)
-;; 	 (cond
-;; 	   ((eq dst_t 'exit) (= a 9))
-;; 	   ((eq dst_t 'airport) (and (= a 0) (/= d (mod (+ (caddr point) 4) 8))))))))
-;; (defun bfs (maps x y a dst_n dst_t d)
-;;   (setf *map* (car maps)
-;; 	*map2* (cadr maps))
-;;   (let ((queue (make-queue 102400)))
-;;     (enqueue (list (list x y a d)) queue)
-;;     (do (e j)
-;; 	((queue-empty-p queue) nil)
-;;       (setf e (dequeue queue) j (car e))
-;;       (if (reach-p (car j) (cadr j) (caddr j) dst_n dst_t (cadddr j))
-;; 	  (return e))
-;;       (loop
-;; 	 for deta-a in '(0 -1 1)
-;; 	 do (loop
-;; 	       for i from 0 to 7
-;; 	       for d = (elt *dir* i)
-;; 	       for deta-x = (car d)
-;; 	       for deta-y = (cadr d)
-;; 	       if (and (good-dir-p (cadddr j) i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) i))
-;; 	       do (enqueue (cons (list (+ x deta-x) (+ y deta-y) (+ a deta-a) i) e) queue))))))
+(defun mark-path (path)
+  (loop
+     for p in path
+     for time from 0
+     for x = (car p)
+     for y = (cadr p)
+     for a = (caddr p)
+     do (map2-set x y a time))
+  path)
+(defun make-map! (&optional game)
+  (let ((maps (make-map game)))
+    (setf *map* (car maps)
+	*map2* (cadr maps)))
+  t)
+(defun search-dfs (x y a dst_n dst_t fuel d)
+  (mark-path (dfs x y a nil dst_n dst_t fuel d 0)))
