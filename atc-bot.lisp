@@ -38,9 +38,11 @@
 	 '(1 0)
 	 '(0)))
     (airport
-     (if (> a 1)
-     	 '(-1 0)
-     	 '(0)))))
+     (cond 
+       ((> a 1)
+	'(-1 0))
+       ((= a 1) '(0))
+       ((= a 0) '(1 0))))))
 
 (defun best-dir(d-x d-y x y)
   (cond
@@ -147,12 +149,19 @@
 	     do (setf (aref map2 x y time) 0)))
     (list map map2)))
 
-(defun get-plane (filename)
+(defmacro decode-plane (sexp)
+  `(let* ((i ,sexp)
+	  (plane (car i))
+	  (info (cdr i)))
+     (list plane info)))
+
+(defun get-planes (filename)
   (with-open-file (in filename)
     (loop for i = (read-line in nil nil)
        while i
        collect
-	 (mapcar #'parse-integer (split " " i)))))
+	 (decode-plane (read-from-string i)))))
+
 (defun dfs (x y a path dst_n dst_t fuel old-dir time)
   (if (< fuel 0)
       nil
@@ -202,3 +211,41 @@
   t)
 (defun search-dfs (x y a dst_n dst_t fuel d)
   (mark-path (dfs x y a nil dst_n dst_t fuel d 0)))
+
+(defun action (path)
+  (let* ((o (car path))
+	 (n (cadr path))
+	 (o-x (car o))
+	 (o-y (cadr o))
+	 (x (car n))
+	 (y (cadr n))
+	 (a (caddr n)))
+    (list
+     (cond
+       ((and (= o-x x) (< y o-y)) "w")
+       ((and (> x o-x) (< y o-y)) "e")
+       ((and (> x o-x) (= y o-y)) "d")
+       ((and (> x o-x) (> y o-y)) "c")
+       ((and (= x o-x) (> y o-y)) "x")
+       ((and (< x o-x) (> y o-y)) "z")
+       ((and (< x o-x) (= y o-y)) "a")
+       ((and (< x o-x) (< y o-y)) "q"))
+     a)))
+(defun get-next-actions (in-file)
+  (make-map!)
+  (loop
+     for i in (get-planes in-file)
+     for plane = (code-char (+ (char-code #\a) (car i)))
+     for info = (cadr i)
+     for action = (action (apply #'search-dfs info))
+     collect (format nil "~aa~a~%~at~a~%" plane (cadr action) plane (car action))))
+
+(defun main (in-file out-file)
+  (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create)
+    (loop for i = (get-next-actions in-file)
+       do (loop for j in i
+	     do (princ j out)
+	     do (finish-output out)
+	     ;; do (princ j)
+	       )
+       do (sleep 1))))
