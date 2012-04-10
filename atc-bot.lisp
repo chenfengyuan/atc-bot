@@ -41,16 +41,8 @@
 	 '(-1 0)
 	 '(0)))))
 
-(defun best-dir(dst_n dst_t x y)
-  (let* ((d_pos (nth dst_n
-		     (nth
-		      (ecase dst_t
-			(exit 2)
-			(airport 3))
-		      *game*)))
-	 (d-x (car d_pos))
-	 (d-y (cadr d_pos)))
-    (cond
+(defun best-dir(d-x d-y x y)
+  (cond
       ((and (< d-x x) (< d-y y)) '(7 6 0 1 5 2 4 3))
       ((and (= d-x x) (< d-y y)) '(0 7 1 2 6 3 5 4))
       ((and (> d-x x) (< d-y y)) '(1 0 2 7 3 4 6 5))
@@ -58,7 +50,29 @@
       ((and (> d-x x) (= d-y y)) '(2 1 3 0 4 5 7 6))
       ((and (< d-x x) (> d-y y)) '(5 4 6 3 7 0 2 1))
       ((and (= d-x x) (> d-y y)) '(4 3 5 2 6 1 7 0))
-      ((and (> d-x x) (> d-y y)) '(3 2 4 1 5 0 6 7)))))
+      ((and (> d-x x) (> d-y y)) '(3 2 4 1 5 0 6 7))))
+
+(defun best-dir-dst(dst_n dst_t x y)
+  (let* ((d_pos (nth dst_n
+		     (nth
+		      (ecase dst_t
+			(exit 2)
+			(airport 3))
+		      *game*)))
+	 (d-x (car d_pos))
+	 (d-y (cadr d_pos))
+	 d-dir)
+    (ecase dst_t
+      (exit
+       (best-dir d-x d-y x y))
+      (airport
+       (setf d-dir (dir->num (caddr d_pos)))
+       (cond
+	 ((and (= d-dir 0) (<= y d-y)) '(4 5 3 2 6 1 7 0))
+	 ((and (= d-dir 2) (<= d-x x)) '(6 7 5 0 4 1 3 2))
+	 ((and (= d-dir 4) (<= d-y y)) '(0 7 1 6 2 5 3 4))
+	 ((and (= d-dir 6) (<= x d-x)) '(2 1 3 0 4 7 5 6))
+	 (t (best-dir d-x d-y x y)))))))
     
 (defun safe-pos-p (x y a d)
   (if (and
