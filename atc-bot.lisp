@@ -263,4 +263,4 @@
 	     do (finish-output out)
 	     ;; do (princ j)
 	       )
-       do (sleep 1))))
+       do (sleep 3))))
