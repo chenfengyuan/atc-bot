@@ -81,16 +81,19 @@
   (if (and
        (good-pos-p x y)
        (not (null (aref *map2* x y time)))
-       (loop for deta-a in '(-1 0 1)
-	  always (loop
-		    for j from 0
-		    for i across *dir*
-		    for deta-x = (car i)
-		    for deta-y = (cadr i)
-		    always (if
-			    (and (good-pos-p (+ x deta-x) (+ y deta-y)) (/= j (mod (+ d 4) 8)))
-			    (= 0 (logand (ash 1 (+ a deta-a)) (aref *map2* (+ x deta-x) (+ y deta-y) time)))
-			    t))))
+       (loop for deta-t in '(-1 0 1)
+	  always (if (< -1 (+ deta-t time) *max-time*)
+		     (loop for deta-a in '(-1 0 1)
+			always (loop
+				  for j from 0
+				  for i across *dir*
+				  for deta-x = (car i)
+				  for deta-y = (cadr i)
+				  always (if
+					  (and (good-pos-p (+ x deta-x) (+ y deta-y)) (/= j (mod (+ d 4) 8)))
+					  (= 0 (logand (ash 1 (+ a deta-a)) (aref *map2* (+ x deta-x) (+ y deta-y) time)))
+					  t)))
+		     t)))
       t))
 (defun map2-set (x y a time)
   (setf (aref *map2* x y time) (logior (aref *map2* x y time) (ash 1 a))))
