@@ -198,22 +198,22 @@
 		   until p
 		   finally (return p)))))))
 
-(defun mark-path (path)
+(defun mark-path (path plane_type)
   (loop
      for p in path
      for time from 0
      for x = (car p)
      for y = (cadr p)
      for a = (caddr p)
-     do (map2-set x y a time))
+     do (map2-set x y a (if (= plane_type 0) time (truncate time 2))))
   path)
 (defun make-map! (&optional game)
   (let ((maps (make-map game)))
     (setf *map* (car maps)
 	*map2* (cadr maps)))
   t)
-(defun search-dfs (x y a dst_n dst_t fuel d)
-  (mark-path (dfs x y a nil dst_n dst_t fuel d 0)))
+(defun search-dfs (plane_type x y a dst_n dst_t fuel d)
+  (mark-path (dfs x y a nil dst_n dst_t fuel d 0) plane_type))
 
 (defun action (path)
   (let* ((o (car path))
