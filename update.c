@@ -57,6 +57,7 @@ void print_plane(void)
 	PLANE *pp;
 	FILE *f;
 	f=fopen("/dev/shm/a","w");
+	fprintf(f,"%d\n",clck);
 	for(pp=air.head;pp!=NULL;pp=pp->next){
 		fprintf(f,"(%d %d %d %d %d %d %s %d %d)\n",
 			pp->plane_no,
