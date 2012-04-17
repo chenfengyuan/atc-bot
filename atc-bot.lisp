@@ -253,22 +253,28 @@
 	     do (setf (aref map x y time) 0)))
     (setf *map* map)
     t))
-(defun safe-pos-p (x y a step plane-type)
-  (if (and
-       (good-pos-p x y)
-       (not (null (aref *map* x y step)))
-       (loop for time in (if (= plane-type 0) `(,(* 2 step) ,(+ 1 step step)) `(,step))
-	  always (loop for deta-a in '(-1 0 1)
-		    always (loop
-			      for j from 0
-			      for i across *deta-xy*
-			      for deta-x = (car i)
-			      for deta-y = (cadr i)
-			      always (if
-				      (good-pos-p (+ x deta-x) (+ y deta-y)) 
-				      (= 0 (logand (ash 1 (+ a deta-a)) (aref *map* (+ x deta-x) (+ y deta-y) time)))
-				      t)))))
-      t))
+(defun safe-pos-p (x y a step plane-type dst-x dst-y dst-type)
+  (if (and (= x dst-x)
+	   (= y dst-y)
+	   (ecase dst-type
+	     (exit (= a 9))
+	     (airport (= a 0))))
+      t
+      (if (and
+	   (good-pos-p x y)
+	   (not (null (aref *map* x y step)))
+	   (loop for time in (if (= plane-type 0) `(,(* 2 step) ,(+ 1 step step)) `(,step))
+	      always (loop for deta-a in '(-1 0 1)
+			always (loop
+				  for j from 0
+				  for i across *deta-xy*
+				  for deta-x = (car i)
+				  for deta-y = (cadr i)
+				  always (if
+					  (good-pos-p (+ x deta-x) (+ y deta-y)) 
+					  (= 0 (logand (ash 1 (+ a deta-a)) (aref *map* (+ x deta-x) (+ y deta-y) time)))
+					  t)))))
+	  t)))
 
 ;; (defun best-a(dst_t a)
 ;;   (ecase dst_t
@@ -412,7 +418,7 @@
 			      for d = (elt *deta-xy* i)
 			      for deta-x = (car d)
 			      for deta-y = (cadr d)
-			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) (1+ step) plane-type))
+			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) (1+ step) plane-type dst-x dst-y dst-type))
 			      do (setf p (dfs (+ x deta-x) (+ y deta-y) (+ a deta-a) path dst-type dst-x dst-y dst-dir (1- fuel) i (1+ step) plane-type))
 			      until p
 			      finally (return p))
@@ -454,7 +460,7 @@
 	 (dst-x (car dst))
 	 (dst-y (cadr dst))
 	 (dst-dir (dir->num (caddr dst))))
-    (if (safe-pos-p x y a step plane-type)
+    (if (safe-pos-p x y a step plane-type dst-x dst-y dst-type)
 	(mark-path (dfs x y a (make-list step) dst-type dst-x dst-y dst-dir fuel dir step plane-type) plane-type))))
 
 (defun wait-until-modify (file)
