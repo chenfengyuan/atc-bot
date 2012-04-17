@@ -5,6 +5,9 @@
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
 (defparameter *max-time* 100)
+(defvar *infos* nil)
+(defvar *planes* nil)
+(defvar *time-start* nil)
 ;; (defvar *actions* (make-hash-table))
 (defvar *map* nil)
 (defvar *map2* nil)
@@ -72,12 +75,14 @@
     (4 (= x0 x1))
     (6 (= y0 y1))))
 
-(defun next-dirs (x y dir dst-x dst-y dst-dir dst-type)
-  (ecase dst-type
-    (airport
-     (get-dirs (next-dirs-airport x y dir dst-x dst-y dst-dir) dir))
-    (exit
-     (next-dirs-exit x y dst-x dst-y dst-dir))))
+(defun next-dirs (a x y dir dst-x dst-y dst-dir dst-type)
+  (if (= a 0)
+      `(,dir)
+      (ecase dst-type
+	(airport
+	 (get-dirs (next-dirs-airport x y dir dst-x dst-y dst-dir) dir))
+	(exit
+	 (next-dirs-exit x y dst-x dst-y dst-dir)))))
 (defun next-dirs-airport (x y dir dst-x dst-y dst-dir)
   (let ((sf (forwardp x y dir dst-x dst-y))
 	(sb (backwardp x y dir dst-x dst-y))
@@ -185,20 +190,26 @@
      '(1 0 -1))
     ((= a 9)
      '(0 -1))
-    ((= 1)
-     '(1 0))))
+    ((= a 1)
+     '(1 0))
+    (t
+     '(1))))
 (defun next-a-airport (a)
   (cond
     ((< 1 a 9)
      '(-1 0 1))
     ((= a 9)
      '(-1 0))
-    ((= 1)
-     '(0 1))))
+    ((= a 1)
+     '(0 1))
+    (t
+     '(1))))
+
 (defun next-a (a dst-type)
   (ecase dst-type
     (airport (next-a-airport a))
     (exit (next-a-exit a))))
+
 (defun dir->num (d)
   (ecase d
     (w 0)
@@ -242,23 +253,21 @@
 	     do (setf (aref map x y time) 0)))
     (setf *map* map)
     t))
-(defun safe-pos-p (x y a time)
+(defun safe-pos-p (x y a step plane-type)
   (if (and
        (good-pos-p x y)
-       (not (null (aref *map* x y time)))
-       (loop for deta-t in '(0)
-	  always (if (< -1 (+ deta-t time) *max-time*)
-		     (loop for deta-a in '(-1 0 1)
-			always (loop
-				  for j from 0
-				  for i across *deta-xy*
-				  for deta-x = (car i)
-				  for deta-y = (cadr i)
-				  always (if
-					  (good-pos-p (+ x deta-x) (+ y deta-y)) 
-					  (= 0 (logand (ash 1 (+ a deta-a)) (aref *map* (+ x deta-x) (+ y deta-y) (+ deta-t time))))
-					  t)))
-		     t)))
+       (not (null (aref *map* x y step)))
+       (loop for time in (if (= plane-type 0) `(,(* 2 step) ,(+ 1 step step)) `(,step))
+	  always (loop for deta-a in '(-1 0 1)
+		    always (loop
+			      for j from 0
+			      for i across *deta-xy*
+			      for deta-x = (car i)
+			      for deta-y = (cadr i)
+			      always (if
+				      (good-pos-p (+ x deta-x) (+ y deta-y)) 
+				      (= 0 (logand (ash 1 (+ a deta-a)) (aref *map* (+ x deta-x) (+ y deta-y) time)))
+				      t)))))
       t))
 
 ;; (defun best-a(dst_t a)
@@ -319,22 +328,32 @@
 ;; 	 ((and (> d-x x) (> d-y y)) '(0 6 1 5 2 4 3 7)))))))
 
 (defun map-set (x y a time)
-  (setf (aref *map2* x y time) (logior (aref *map2* x y time) (ash 1 a))))
+  (unless (eq a nil)
+    (setf (aref *map* x y time) (logior (aref *map* x y time) (ash 1 a)))))
 (defun map-clr (x y a time)
-  (setf (aref *map2* x y time) (logand (aref *map2* x y time) (lognot (ash 1 a)))))
+  (unless (eq a nil)
+    (setf (aref *map* x y time) (logand (aref *map* x y time) (lognot (ash 1 a))))))
 
-;; (defmacro decode-plane (sexp)
-;;   `(let* ((i ,sexp)
-;; 	  (plane (car i))
-;; 	  (info (cdr i)))
-;;      (list plane info)))
+(defmacro decode-plane (sexp)
+  `(let* ((i ,sexp)
+	  (plane (car i))
+	  (infos (cdr i)))
+     (list plane infos)))
 
-;; (defun get-planes (filename)
-;;   (with-open-file (in filename)
-;;     (loop for i = (read-line in nil nil)
-;;        while i
-;;        collect
-;; 	 (decode-plane (read-from-string i)))))
+(defun get-infos (filename)
+  (with-open-file (in filename)
+    (cons (parse-integer (read-line in nil nil))
+	  (loop for i = (read-line in nil nil)
+	     while i
+	     collect
+	       (decode-plane (read-from-string i))))))
+(defun get-infos! (filename)
+  (setf *infos* (get-infos filename)))
+
+(defun get-plane-nums (&optional infos)
+  (unless infos (setf infos *infos*))
+  (loop for i in (cdr infos)
+       collect (car i)))
 ;; (defun distance (dst_n dst_t x y)
 ;;   (let* ((d_pos (nth dst_n
 ;; 		     (nth
@@ -360,7 +379,12 @@
 ;; 	   (< (caadr x) (caadr y))
 ;; 	   (< (plane-distance (cadr x)) (plane-distance (cadr y)))
 ;; 	   (< (nth 6 (cadr x)) (nth 6 (cadr y)))))))
-(defun dfs (x y a path dst-type dst-x dst-y dst-dir fuel old-dir time)
+(defun fix-dir (dir)
+  (ecase dir
+    ((1 3 5 7) '(0 2 4 6))
+    ((0 2 4 6))))
+
+(defun dfs (x y a path dst-type dst-x dst-y dst-dir fuel old-dir step plane-type)
   (if (< fuel 0)
       nil
       (let ((path (append path (list (list x y a)))))
@@ -381,68 +405,120 @@
 		   for deta-a in (next-a a dst-type)
 		   for p = (loop
 			      with p = nil
-			      for i in (next-dirs x y old-dir dst-x dst-y dst-dir dst-type)
+			      for i in (if (and (eq dst-type 'airport)
+						(member old-dir '(1 3 5 7)))
+					   (fix-dir old-dir)
+					   (next-dirs a x y old-dir dst-x dst-y dst-dir dst-type))
 			      for d = (elt *deta-xy* i)
 			      for deta-x = (car d)
 			      for deta-y = (cadr d)
-			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) time))
-			      do (setf p (dfs (+ x deta-x) (+ y deta-y) (+ a deta-a) path dst-type dst-x dst-y dst-dir (1- fuel) i (1+ time)) )
+			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) (1+ step) plane-type))
+			      do (setf p (dfs (+ x deta-x) (+ y deta-y) (+ a deta-a) path dst-type dst-x dst-y dst-dir (1- fuel) i (1+ step) plane-type))
 			      until p
 			      finally (return p))
 		   until p
 		   finally (return p)))))))
 
-(defun mark-path (path plane_type)
+(defun mark-path (path plane-type)
   (loop
      for p in path
-     for time from 0
+     for step from 0
      for x = (car p)
      for y = (cadr p)
      for a = (caddr p)
-     do (map-set x y a (if (= plane_type 0) (* time 2) time)))
+     do (if (= plane-type 0)
+	    (progn
+	      (map-set x y a (* step 2))
+	      (map-set x y a (1+ (* step 2))))
+	    (map-set x y a step)))
   path)
 
-(defun unmark-path (path plane_type)
+(defun unmark-path (path plane-type)
   (loop
      for p in path
-     for time from 0
+     for step from 0
      for x = (car p)
      for y = (cadr p)
      for a = (caddr p)
-     do (map-clr x y a (if (= plane_type 0) (* time 2) time)))
+     do (if (= plane-type 0)
+	    (progn
+	      (map-clr x y a (* step 2))
+	      (map-clr x y a (1+ (* step 2))))
+	    (map-clr x y a step)))
   path)
 
-;; (defun make-map! (&optional game)
-;;   (let ((maps (make-map game)))
-;;     (setf *map* (car maps)
-;; 	  *map2* (cadr maps)))
-;;   t)
-;; (defun search-dfs (plane_type x y a dst_n dst_t fuel d)
-;;   (mark-path (dfs x y a nil dst_n dst_t fuel d 0) plane_type)
-;;   )
+(defun search-dfs (plane-type x y a dst-n dst-type fuel dir &optional (step 0))
+  (let* ((dst (nth dst-n (ecase dst-type
+			     (airport (nth 3 *game*))
+			     (exit (nth 2 *game*)))))
+	 (dst-x (car dst))
+	 (dst-y (cadr dst))
+	 (dst-dir (dir->num (caddr dst))))
+    (if (safe-pos-p x y a step plane-type)
+	(mark-path (dfs x y a (make-list step) dst-type dst-x dst-y dst-dir fuel dir step plane-type) plane-type))))
 
-;; (defun action (path)
-;;   (let* ((o (car path))
-;; 	 (n (cadr path))
-;; 	 (o-x (car o))
-;; 	 (o-y (cadr o))
-;; 	 (x (car n))
-;; 	 (y (cadr n))
-;; 	 (a (caddr n)))
-;;     (list
-;;      (cond
-;;        ((and (= o-x x) (< y o-y)) "w")
-;;        ((and (> x o-x) (< y o-y)) "e")
-;;        ((and (> x o-x) (= y o-y)) "d")
-;;        ((and (> x o-x) (> y o-y)) "c")
-;;        ((and (= x o-x) (> y o-y)) "x")
-;;        ((and (< x o-x) (> y o-y)) "z")
-;;        ((and (< x o-x) (= y o-y)) "a")
-;;        ((and (< x o-x) (< y o-y)) "q"))
-;;      a)))
+(defun wait-until-modify (file)
+  (with-inotify (inot `((,file ,in-close-write)))
+    (read-events inot)))
+
+(defun action (path n)
+  (if (nth n path)
+      (let* ((o (nth n path))
+	     (n (nth (1+ n) path))
+	     (o-x (car o))
+	     (o-y (cadr o))
+	     (x (car n))
+	     (y (cadr n))
+	     (a (caddr n)))
+	(list
+	 (cond
+	   ((and (= o-x x) (< y o-y)) "w")
+	   ((and (> x o-x) (< y o-y)) "e")
+	   ((and (> x o-x) (= y o-y)) "d")
+	   ((and (> x o-x) (> y o-y)) "c")
+	   ((and (= x o-x) (> y o-y)) "x")
+	   ((and (< x o-x) (> y o-y)) "z")
+	   ((and (< x o-x) (= y o-y)) "a")
+	   ((and (< x o-x) (< y o-y)) "q"))
+	 a))))
+(defun plane-a (info)
+  (nth 3 info))
+(defun plane-type (infos plane-num)
+  (loop
+     for info in (cdr infos)
+     for num = (car info)
+     for plane-type = (caadr info)
+     until (= num plane-num)
+     finally (return plane-type)))
+(defun calculate-paths (&optional infos)
+  (make-map)
+  (setf *planes* (make-hash-table :test #'equalp))
+  (loop
+     for plane in (cdr (if infos infos *infos*))
+     for num = (car plane)
+     for info = (cadr plane)
+     do (setf (gethash num *planes*)
+	      (if (= 0 (plane-a info))
+		  (let ((plane-type (nth 0 info))
+			(x (nth 1 info))
+			(y (nth 2 info))
+			(dst-n (nth 4 info))
+			(dst-type (nth 5 info))
+			(fuel (nth 6 info))
+			(dir (nth 7 info)))
+		    (loop
+		       for step from 0
+		       for i = (search-dfs plane-type x y 0 dst-n dst-type fuel dir step)
+		       until i
+		       finally (return i)))
+		  (apply #'search-dfs info)))))
+(defun every-plane-has-its-path (&optional planes infos)
+  (and (if planes planes *planes*)
+       (loop for i in (get-plane-nums (if infos infos *infos*))
+	  always (gethash i (if planes planes *planes*)))))
 
 ;; (defun get-path (in-file)
-;;   (make-map!)
+;;   (make-map)
 ;;   (loop
 ;;      for i in (get-planes in-file)
 ;;      for plane = (code-char (+ (char-code #\a) (car i)))
@@ -451,7 +527,7 @@
 ;;      collect (list plane path)))
 
 ;; (defun get-next-actions (in-file)
-;;   (make-map!)
+;;   (make-map)
 ;;   (loop
 ;;      for i in (get-planes in-file)
 ;;      for plane = (code-char (+ (char-code #\a) (car i)))
@@ -459,16 +535,39 @@
 ;;      for action = (action (apply #'search-dfs info))
 ;;      collect (format nil "~aa~a~%~at~a~%" plane (cadr action) plane (car action))))
 
-;; (defun wait-until-modify (file)
-;;   (with-inotify (inot `((,file ,in-close-write)))
-;;     (read-events inot)))
 
-;; (defun main (in-file out-file)
-;;   (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
-;;     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create)
-;;       (loop for i = (progn (wait-until-modify in-file) (get-next-actions in-file))
-;; 	 do (loop for j in i
-;; 	       do (princ j out)
-;; 	       do (finish-output out)
-;; 	       do (princ j log)
-;; 	       do (finish-output log))))))
+(defun plane-num->plane-name (num)
+  (code-char (+ (char-code #\a) num)))
+(defun next-action (plane-num actions plane-type time1 time2)
+  (let ((diff-time
+	 (ecase plane-type
+	   (0 (truncate (- time1 time2) 2))
+	   (1 (- time1 time2)))))
+    (if (car (action actions diff-time))
+	(format nil "~aa~a~%~at~a~%"
+		(plane-num->plane-name plane-num) (cadr (action actions diff-time))
+		(plane-num->plane-name plane-num) (car (action actions diff-time)))
+	"")))
+(defun main (in-file out-file)
+  (setf *time-start* 0 *planes* nil)
+  (file-position *log* 0)
+  (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
+    (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create)
+      (loop
+	 for infos = (progn (wait-until-modify in-file) (get-infos in-file))
+	 for time = (car infos)
+	 do (progn
+	      (unless (every-plane-has-its-path *planes* infos)
+		(calculate-paths infos)
+		(setf *time-start* time))
+	      (format log "~a,~a~%~a~%~a~%~%~%" time *time-start* infos (alexandria:hash-table-plist *planes*))
+	      (loop
+		 for plane-num in (get-plane-nums infos)
+		 for actions = (gethash plane-num *planes*)
+		 ;; for plane-num being the hash-key of *planes* using (hash-value actions)
+		 if actions
+		 do (princ (princ (next-action plane-num actions (plane-type infos plane-num) time *time-start*)
+				  out)
+			   log) and
+		 do (finish-output out) and
+		 do (finish-output log)))))))
