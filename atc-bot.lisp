@@ -1,7 +1,7 @@
 (declaim (optimize (debug 3)))
 
 (defpackage :cfy.atc-bot
-  (:use :cl :cl-ppcre :inotify))
+  (:use :cl :alexandria :inotify))
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
 (defparameter *max-time* 100)
@@ -490,13 +490,15 @@
      for plane-type = (caadr info)
      until (= num plane-num)
      finally (return plane-type)))
-(defun calculate-paths (&optional infos)
+(defun calculate-paths (&optional (infos *infos*))
   (make-map)
+  (mark-all-flying-planes infos)
   (setf *planes* (make-hash-table :test #'equalp))
   (loop
-     for plane in (cdr (if infos infos *infos*))
+     for plane in (cdr infos)
      for num = (car plane)
      for info = (cadr plane)
+     do (unmark-plane num infos)
      do (setf (gethash num *planes*)
 	      (if (= 0 (plane-a info))
 		  (let ((plane-type (nth 0 info))
@@ -548,9 +550,46 @@
 		(plane-num->plane-name plane-num) (cadr (action actions diff-time))
 		(plane-num->plane-name plane-num) (car (action actions diff-time)))
 	"")))
+(defun mark-plane (plane-num &optional infos)
+  (unless infos
+    (setf infos *infos*))
+  (let* ((info (loop
+		 for i in (cdr infos)
+		 until (= plane-num (car i))
+		 finally (return i)))
+	 (plane-type (nth 0 (cadr info)))
+	 (x (nth 1 (cadr info)))
+	 (y (nth 2 (cadr info)))
+	 (a (nth 3 (cadr info))))
+    (if (= plane-type 0)
+	(progn
+	  (map-set x y a 0)
+	  (map-set x y a 1))
+	(map-set x y a 0))))
+(defun unmark-plane (plane-num &optional infos)
+  (unless infos
+    (setf infos *infos*))
+  (let* ((info (loop
+		 for i in (cdr infos)
+		 until (= plane-num (car i))
+		 finally (return i)))
+	 (plane-type (nth 0 (cadr info)))
+	 (x (nth 1 (cadr info)))
+	 (y (nth 2 (cadr info)))
+	 (a (nth 3 (cadr info))))
+    (if (= plane-type 0)
+	(progn
+	  (map-clr x y a 0)
+	  (map-clr x y a 1))
+	(map-clr x y a 0))))
+(defun mark-all-flying-planes (&optional (infos *infos*))
+  (loop
+     for info in (cdr infos)
+     if (> (plane-a (cadr info)) 0)
+     do (mark-plane (car info) infos)))
+
 (defun main (in-file out-file)
   (setf *time-start* 0 *planes* nil)
-  (file-position *log* 0)
   (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create)
       (loop
@@ -560,7 +599,7 @@
 	      (unless (every-plane-has-its-path *planes* infos)
 		(calculate-paths infos)
 		(setf *time-start* time))
-	      (format log "~a,~a~%~a~%~a~%~%~%" time *time-start* infos (alexandria:hash-table-plist *planes*))
+	      (format log "~a~%~a~%~a~%" *time-start* infos (hash-table-plist *planes*))
 	      (loop
 		 for plane-num in (get-plane-nums infos)
 		 for actions = (gethash plane-num *planes*)
