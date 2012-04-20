@@ -167,29 +167,16 @@
 	    (sr '(hr s hl))
 	    (sl '(hl s hr)))))))))
 (defun next-dirs-exit (x y dst-x dst-y dst-dir)
-  (let ((d-x dst-x) (d-y dst-y))
-    (ecase dst-dir
-      (4 (incf d-y))
-      (5 (decf d-x) (incf d-y))
-      (6 (decf d-x))
-      (7 (decf d-x) (decf d-y))
-      (0 (decf d-y))
-      (1 (incf d-x) (decf d-y))
-      (2 (incf d-x))
-      (3 (incf d-x) (incf d-y)))
-    (if (and (= d-x x) (= d-y y))
-	(list (position (list (- dst-x x)
-			      (- dst-y y))
-			(deta-xy) :test #'equalp))
-	(cond
-	  ((and (> d-x x) (> d-y y)) '(3 1 5 2 4 0 6 7))
-	  ((and (> d-x x) (= d-y y)) '(2 0 4 1 3 5 7 6))
-	  ((and (> d-x x) (< d-y y)) '(1 7 3 0 2 6 4 5))
-	  ((and (= d-x x) (> d-y y)) '(4 5 3 6 2 7 1 0))
-	  ((and (= d-x x) (< d-y y)) '(0 7 1 6 2 5 3 4))
-	  ((and (< d-x x) (> d-y y)) '(5 6 4 7 3 0 2 1))
-	  ((and (< d-x x) (= d-y y)) '(6 7 5 0 4 1 3 2))
-	  ((and (< d-x x) (< d-y y)) '(7 0 6 1 5 2 4 3))))))
+  (declare (ignore dst-dir))
+  (cond
+    ((and (> dst-x x) (> dst-y y)) '(3 4 2 5 1 0 6 7))
+    ((and (> dst-x x) (= dst-y y)) '(2 3 1 4 0 5 7 6))
+    ((and (> dst-x x) (< dst-y y)) '(1 2 0 3 7 4 6 5))
+    ((and (= dst-x x) (> dst-y y)) '(4 5 3 6 2 7 1 0))
+    ((and (= dst-x x) (< dst-y y)) '(0 1 7 2 6 3 5 4))
+    ((and (< dst-x x) (> dst-y y)) '(5 6 4 7 3 0 2 1))
+    ((and (< dst-x x) (= dst-y y)) '(6 7 5 0 4 1 3 2))
+    ((and (< dst-x x) (< dst-y y)) '(7 0 6 1 5 2 4 3))))
 (defun good-dir-p (old-dir new-dir)
   (if (or
        (<= (mod (- old-dir new-dir) 8)2)
@@ -235,6 +222,21 @@
     (z 5)
     (a 6)
     (q 7)))
+(defun unmark-dstination (&optional (game *game*))
+  (let ((exits (caddr game))
+	(airports (cadddr game)))
+    (loop
+       for i in exits
+       for x = (car i)
+       for y = (cadr i)
+       do (loop for time from 0 to (1- *max-time*)
+    	     do (map-clr x y 9 time)))
+    (loop
+       for i in airports
+       for x = (car i)
+       for y = (cadr i)
+       do (loop for time from 0 to (1- *max-time*)
+	     do (map-clr x y 0 time)))))
 (defun make-map (&optional game)
   (let* ((game (if game
 		   game
@@ -256,8 +258,7 @@
        for i in exits
        for x = (car i)
        for y = (cadr i)
-       do (setf (aref map x y 0) 0)
-       do (loop for time from 1 to (1- *max-time*)
+       do (loop for time from 0 to (1- *max-time*)
     	     do (setf (aref map x y time) 0)))
     (loop
        for i in airports
@@ -566,7 +567,8 @@
 		       for i = (search-dfs plane-type x y 0 dst-n dst-type fuel dir step)
 		       until i
 		       finally (return i)))
-		  (apply #'search-dfs info)))))
+		  (apply #'search-dfs info)))
+     do (unmark-dstination)))
 (defun plane-pos-a (infos plane-num)
   (let ((planes (cdr infos)))
     (loop
