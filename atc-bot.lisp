@@ -439,6 +439,7 @@
 		 (and (eq dst-type 'airport)
 		      (= a 1)
 		      (= dst-dir old-dir)
+		      (> (length path) 1)
 		      (= (caddr (car (last path 2))) 1)
 		      (setf (caddr (car (last path))) 0))))
 	    path
@@ -577,7 +578,7 @@
        finally (return (list (nth 1 (cadr plane))
 			     (nth 2 (cadr plane))
 			     (nth 3 (cadr plane)))))))
-(defun every-plane-has-its-path (&optional (planes *planes*) (infos *infos*) time)
+(defun every-plane-has-its-path (&optional (planes *planes*) (infos *infos*) (time *base-time*))
   (and (if planes planes *planes*)
        (loop for i in (get-plane-nums infos)
 	  always (and
@@ -712,30 +713,33 @@
   (setf *base-time* 0 *planes* nil *max-write-time* 0 *max-calculate-time* 0
 	*write-times* '(0 0) *calculate-times* '(0 0))
   (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
-    (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create)
+    (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
       (loop
+	 with start and end
 	 with count = 0
-	 for infos = (progn (wait-until-modify in-file) (get-infos in-file))
+	 for infos = (progn (wait-until-modify in-file) (sleep 0.001) (setf start (get-internal-real-time)) (get-infos in-file))
 
 	 ;; for infos = (sort-by-planes-shortest-reach-time 
 	 ;; 	      (progn (wait-until-modify in-file) (get-infos in-file)))
 	 for time = (car infos)
-	 do (format log "~a~%" infos)
+	 do (format log "~a~%~a~%" start infos)
 	 unless (every-plane-has-its-path *planes* infos time)
 	 do (setf *infos* infos) and
 	 do (setf *base-time* time) and
 	 do (ignore-errors (with-timeout (0.05)
 			     (calculate-paths infos))) and
-	 do (with-timeout (0.3)
-	     (loop
-		until (every-plane-has-its-path *planes* infos time)
-		do (format t "~a " (incf count))
-		do (ignore-errors
-		     (with-timeout (0.05)
-		       (setf infos (shuffle-sort-infos infos))
-		       (calculate-paths infos)
-		       ;; (calculate-paths infos)
-		       (setf *infos* infos)))))
+	 do (loop
+	       for i from 0
+	       if (> i 10)
+	       do (error "time out")
+	       until (every-plane-has-its-path *planes* infos time)
+	       do (incf count)
+	       do (ignore-errors
+		    (with-timeout (0.03)
+		      (setf infos (shuffle-sort-infos infos))
+		      (calculate-paths infos)
+		      ;; (calculate-paths infos)
+		      (setf *infos* infos))))
 	 do (format log "[~a]~%"  (file-write-date "/dev/shm/a"))
 	 do (format log "~a~%~a~%" *base-time* (hash-table-plist *planes*))
 	 do (loop
@@ -745,7 +749,7 @@
 	       do (princ (princ (next-action plane-num actions (plane-type infos plane-num) time)
 				out)
 			 log))
-	 do (finish-output out)
-	 do (format log "[~a]~%~%"  (file-write-date "/dev/shm/a"))
 	 do (with-timeout (0.2)
-	      (finish-output log))))))
+	      (finish-output out))
+	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (setf end (get-internal-real-time)))
+	 do (force-output log)))))
