@@ -1,7 +1,7 @@
 (declaim (optimize (debug 3)))
 
 (defpackage :cfy.atc-bot
-  (:use :cl :alexandria :inotify :trivial-timeout))
+  (:use :cl :alexandria :inotify :trivial-timeout :ct))
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
 (defparameter *max-time* 100)
@@ -14,6 +14,7 @@
 (defvar *calculate-times* nil)
 (defvar *max-write-time* nil)
 (defvar *max-calculate-time* nil)
+(defvar *ct* nil)
 (defun deta-xy ()
   #(
     (0 -1)				;0
@@ -711,33 +712,33 @@
 	 (funcall ,do-some-thing ,var)))))
 (defun main (in-file out-file)
   (setf *base-time* 0 *planes* nil *max-write-time* 0 *max-calculate-time* 0
-	*write-times* '(0 0) *calculate-times* '(0 0))
+	*write-times* '(0 0) *calculate-times* '(0 0) *ct* (ct-init))
   (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
       (loop
 	 with start and end
 	 with count = 0
-	 for infos = (progn (wait-until-modify in-file) (sleep 0.001) (setf start (get-internal-real-time)) (get-infos in-file))
+	 for infos = (progn (wait-until-modify in-file) (sleep 0.1) (setf start (get-internal-real-time)) (ct-count *ct* (get-infos in-file)))
 
 	 ;; for infos = (sort-by-planes-shortest-reach-time 
 	 ;; 	      (progn (wait-until-modify in-file) (get-infos in-file)))
 	 for time = (car infos)
 	 do (format log "~a~%~a~%" start infos)
-	 unless (every-plane-has-its-path *planes* infos time)
+	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	 do (setf *infos* infos) and
 	 do (setf *base-time* time) and
 	 do (ignore-errors (with-timeout (0.05)
-			     (calculate-paths infos))) and
+			     (ct-count *ct* (calculate-paths infos)))) and
 	 do (loop
 	       for i from 0
 	       if (> i 10)
 	       do (error "time out")
-	       until (every-plane-has-its-path *planes* infos time)
+	       until (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	       do (incf count)
 	       do (ignore-errors
 		    (with-timeout (0.03)
 		      (setf infos (shuffle-sort-infos infos))
-		      (calculate-paths infos)
+		      (ct-count *ct* (calculate-paths infos))
 		      ;; (calculate-paths infos)
 		      (setf *infos* infos))))
 	 do (format log "[~a]~%"  (file-write-date "/dev/shm/a"))
@@ -746,10 +747,10 @@
 	       for plane-num in (get-plane-nums infos)
 	       for actions = (gethash plane-num *planes*)
 	       if actions
-	       do (princ (princ (next-action plane-num actions (plane-type infos plane-num) time)
+	       do (princ (princ (ct-count *ct* (next-action plane-num actions (plane-type infos plane-num) time))
 				out)
 			 log))
 	 do (with-timeout (0.2)
-	      (finish-output out))
+	      (ct-count *ct* (finish-output out)))
 	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (setf end (get-internal-real-time)))
-	 do (force-output log)))))
+	 do (ct-count *ct* (force-output log))))))
