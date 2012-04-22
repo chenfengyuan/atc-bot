@@ -55,36 +55,42 @@
      collect (aref (deta-xy) i)))
 
 (defun forwardp (x0 y0 dir x1 y1)
+  (declare (type fixnum x0 y0 dir x1 y1))
   (ecase dir
     (0 (> y0 y1))
     (2 (< x0 x1))
     (4 (< y0 y1))
     (6 (> x0 x1))))
 (defun backwardp (x0 y0 dir x1 y1)
+  (declare (type fixnum x0 y0 dir x1 y1))
   (ecase dir
     (0 (< y0 y1))
     (2 (> x0 x1))
     (4 (> y0 y1))
     (6 (< x0 x1))))
 (defun parrelp (x0 y0 dir x1 y1)
+  (declare (type fixnum x0 y0 dir x1 y1))
   (ecase dir
     (0 (= y0 y1))
     (2 (= x0 x1))
     (4 (= y0 y1))
     (6 (= x0 x1))))
 (defun leftp (x0 y0 dir x1 y1)
+  (declare (type fixnum x0 y0 dir x1 y1))
   (ecase dir
     (0 (> x0 x1))
     (2 (> y0 y1))
     (4 (< x0 x1))
     (6 (< y0 y1))))
 (defun rightp (x0 y0 dir x1 y1)
+  (declare (type fixnum x0 y0 dir x1 y1))
   (ecase dir
     (0 (< x0 x1))
     (2 (< y0 y1))
     (4 (> x0 x1))
     (6 (> y0 y1))))
 (defun middlep (x0 y0 dir x1 y1)
+  (declare (type fixnum x0 y0 dir x1 y1))
   (ecase dir
     (0 (= x0 x1))
     (2 (= y0 y1))
@@ -103,10 +109,12 @@
 	(exit
 	 (next-dirs-exit x y dst-x dst-y dst-dir)))))
 (defun next-dirs-airport (x y dir dst-x dst-y dst-dir)
+  (declare (type fixnum x y dir dst-x dst-y dst-dir))
   (if (and (not (backwardp dst-x dst-y dst-dir x y)) (member dir '(1 3 5 7)))
       (fix-dir)
       (if (backwardp dst-x dst-y dst-dir x y)
 	  (let ((d-x dst-x) (d-y dst-y))
+	    (declare (type fixnum d-y d-x))
 	     (ecase dst-dir
 	       (0 (incf d-y))
 	       (2 (decf d-x))
@@ -195,6 +203,7 @@
 	       ;; 	    (sl '(hl s hr)))))
 	       ))))))
 (defun next-dirs-exit (x y dst-x dst-y dst-dir)
+  (declare (type fixnum x y dst-x dst-y dst-dir))
   (declare (ignore dst-dir))
   (cond
     ((and (> dst-x x) (> dst-y y)) '(3 4 2 5 1 0 6 7))
@@ -206,15 +215,18 @@
     ((and (< dst-x x) (= dst-y y)) '(6 7 5 0 4 1 3 2))
     ((and (< dst-x x) (< dst-y y)) '(7 0 6 1 5 2 4 3))))
 (defun good-dir-p (old-dir new-dir)
+  (declare (type fixnum old-dir new-dir))
   (if (or
        (<= (mod (- old-dir new-dir) 8)2)
        (<= (mod (- new-dir old-dir) 8) 2))
       t))
 (defun good-pos-p (x y)
+  (declare (type fixnum x y))
   (and (< -1 x (car *game*))
        (< -1 y (cadr *game*))
        (aref *map* x y 0)))
 (defun next-a-exit (a)
+  (declare (type fixnum a))
   (cond
     ((< 1 a 9)
      '(1 0 -1))
@@ -225,6 +237,7 @@
     (t
      '(1))))
 (defun next-a-airport (a)
+  (declare (type fixnum a))
   (cond
     ((< 1 a 9)
      '(-1 0 1))
@@ -252,18 +265,20 @@
     (q 7)))
 (defun unmark-dstination (&optional (game *game*))
   (let ((exits (caddr game))
-	(airports (cadddr game)))
+	(airports (cadddr game))
+	(max-time *max-time*))
+    (declare (type fixnum max-time))
     (loop
        for i in exits
        for x = (car i)
        for y = (cadr i)
-       do (loop for time from 0 to (1- *max-time*)
+       do (loop for time from 0 to (1- max-time)
     	     do (map-clr x y 9 time)))
     (loop
        for i in airports
        for x = (car i)
        for y = (cadr i)
-       do (loop for time from 0 to (1- *max-time*)
+       do (loop for time from 0 to (1- max-time)
 	     do (map-clr x y 0 time)))))
 (defun make-map (&optional game)
   (let* ((game (if game
@@ -274,6 +289,7 @@
 	 (exits (caddr game))
 	 (airports (cadddr game))
 	 (map (make-array (list width height *max-time*))))
+    (declare (type fixnum width height *max-time*))
     (loop for x from 0 to (1- width)
        do (loop for time from 0 to (1- *max-time*)
 	     do (setf (aref map x 0 time) nil
@@ -532,7 +548,8 @@
 	 (dst-x (car dst))
 	 (dst-y (cadr dst))
 	 (dst-dir (dir->num (caddr dst))))
-    (if (safe-pos-p x y a step plane-type dst-x dst-y dst-type dir dst-dir)
+    (if (or (= a 0)
+	    (safe-pos-p x y a step plane-type dst-x dst-y dst-type dir dst-dir))
 	(let ((p (dfs x y a (make-list step) dst-type dst-x dst-y dst-dir fuel dir step plane-type)))
 	  (if mark
 	      (mark-path p plane-type)
@@ -666,11 +683,8 @@
 	 (x (nth 1 (cadr info)))
 	 (y (nth 2 (cadr info)))
 	 (a (nth 3 (cadr info))))
-    (if (= plane-type 0)
-	(progn
-	  (map-set x y a 0)
-	  (map-set x y a 1))
-	(map-set x y a 0))))
+    (loop for time in (step->times 0 plane-type)
+	 do (map-set x y a time))))
 (defun unmark-plane (plane-num &optional infos)
   (unless infos
     (setf infos *infos*))
@@ -682,11 +696,8 @@
 	 (x (nth 1 (cadr info)))
 	 (y (nth 2 (cadr info)))
 	 (a (nth 3 (cadr info))))
-    (if (= plane-type 0)
-	(progn
-	  (map-clr x y a 0)
-	  (map-clr x y a 1))
-	(map-clr x y a 0))))
+    (loop for time in (step->times 0 plane-type)
+	 do (map-set x y a time))))
 (defun mark-all-flying-planes (&optional (infos *infos*))
   (loop
      for info in (cdr infos)
@@ -710,14 +721,14 @@
   (append (list (car infos))
 	  (mapcar #'car
 		  (sort
-		   (get-planes-info-a-l infos)
+		   (get-planes-info-a-l (copy-list infos))
 		   (lambda (x y)
 		     (if (/= (cadr x) (cadr y))
 			 (> (cadr x) (cadr y))
 			 (< (caddr x) (caddr y))))))))
 (defun sort-by-previous-calculating-result (&optional (infos *infos*) (planes *planes*))
   (let ((time (car infos))
-	(planes-info (cdr infos)))
+	(planes-info (cdr (copy-list infos))))
     (append (list time)
 	    (sort planes-info
 		  (lambda (x y)
@@ -792,6 +803,6 @@
 	       do (princ (princ (ct-count *ct* (next-action plane-num actions (plane-type infos plane-num) time))
 				out)
 			 log))
-	 do (ct-count *ct* (finish-output out))
+	 do (with-timeout (0.35)) (ct-count *ct* (finish-output out))
 	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (setf end (get-internal-real-time)))
 	 do (ct-count *ct* (force-output log))))))
