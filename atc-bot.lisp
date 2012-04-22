@@ -96,77 +96,104 @@
       `(,dir)
       (ecase dst-type
 	(airport
-	 (get-dirs (next-dirs-airport x y dir dst-x dst-y dst-dir) dir))
+	 (let ((tmp (next-dirs-airport x y dir dst-x dst-y dst-dir)))
+	   (if (numberp (car tmp))
+	       tmp
+	       (get-dirs tmp dir))))
 	(exit
 	 (next-dirs-exit x y dst-x dst-y dst-dir)))))
 (defun next-dirs-airport (x y dir dst-x dst-y dst-dir)
-  (let ((sf (forwardp x y dir dst-x dst-y))
-	(sb (backwardp x y dir dst-x dst-y))
-	(sl (leftp x y dir dst-x dst-y))
-	(sr (rightp x y dir dst-x dst-y))
-	(df (forwardp dst-x dst-y dst-dir x y))
-	(db (backwardp dst-x dst-y dst-dir x y))
-	(dp (parrelp dst-x dst-y dst-dir x y))
-	(dl (leftp dst-x dst-y dst-dir x y))
-	(dr (rightp dst-x dst-y dst-dir x y))
-	(dm (middlep dst-x dst-y dst-dir x y)))
-    (cond
-      (df
-       (cond
-	 (dl
-	  (if sf
-	      (if sr
-		  '(hr hl s)
-		  '(s hr hl))
-	      '(hl s hr)))
-	 (dr
-	  (if sf
-	      (if sl
-		  '(hl hr s)
-		  '(s hl hr))
-	      '(hr s hl)))
-	 (dm
-	  (cond
-	    (sf '(hl hr s))
-	    (sb '(hl hr s))
-	    (sr '(hr s hl))
-	    (sl '(hl s hr))))))
-      (dp
-       (cond
-	 (dl
-	  (cond
-	    (sf '(hr hl s))
-	    (sb '(hl s hr))
-	    (sr '(hl s hr))
-	    (sl '(s hr hl))))
-	 (dr
-	  (cond
-	    (sf '(hl hr s))
-	    (sb '(hr s hl))
-	    (sr '(hr s hl))
-	    (sl '(hr s hl))))
-	 (t
-	  '(s))))
-      (db
-       (cond
-	 (dl
-	  (if sf
-	      (if sl
-		  '(s hl hr)
-		  '(hr hl s))
-	      '(hl s hr)))
-	 (dr
-	  (if sf
-	      (if sr
-		  '(s hr hl)
-		  '(hl hr s))
-	      '(hr s hl)))
-	 (dm
-	  (cond
-	    (sf '(s hl hr))
-	    (sb '(hl hr s))
-	    (sr '(hr s hl))
-	    (sl '(hl s hr)))))))))
+  (if (and (not (backwardp dst-x dst-y dst-dir x y)) (member dir '(1 3 5 7)))
+      (fix-dir)
+      (if (backwardp dst-x dst-y dst-dir x y)
+	  (let ((d-x dst-x) (d-y dst-y))
+	     (ecase dst-dir
+	       (0 (incf d-y))
+	       (2 (decf d-x))
+	       (4 (decf d-y))
+	       (6 (incf d-x)))
+	     (if (and (= d-x x) (= d-y y))
+		 (list (position (list (- dst-x x)
+				       (- dst-y y))
+				 (deta-xy) :test #'equalp))
+		 (cond
+		   ((and (> d-x x) (> d-y y)) '(3 1 5 2 4 0 6 7))
+		   ((and (> d-x x) (= d-y y)) '(2 0 4 1 3 5 7 6))
+		   ((and (> d-x x) (< d-y y)) '(1 7 3 0 2 6 4 5))
+		   ((and (= d-x x) (> d-y y)) '(4 5 3 6 2 7 1 0))
+		   ((and (= d-x x) (< d-y y)) '(0 7 1 6 2 5 3 4))
+		   ((and (< d-x x) (> d-y y)) '(5 6 4 7 3 0 2 1))
+		   ((and (< d-x x) (= d-y y)) '(6 7 5 0 4 1 3 2))
+		   ((and (< d-x x) (< d-y y)) '(7 0 6 1 5 2 4 3)))))
+	  (let ((sf (forwardp x y dir dst-x dst-y))
+		(sb (backwardp x y dir dst-x dst-y))
+		(sl (leftp x y dir dst-x dst-y))
+		(sr (rightp x y dir dst-x dst-y))
+		(df (forwardp dst-x dst-y dst-dir x y))
+		(db (backwardp dst-x dst-y dst-dir x y))
+		(dp (parrelp dst-x dst-y dst-dir x y))
+		(dl (leftp dst-x dst-y dst-dir x y))
+		(dr (rightp dst-x dst-y dst-dir x y))
+		(dm (middlep dst-x dst-y dst-dir x y)))
+	    (cond
+	      (df
+	       (cond
+		 (dl
+		  (if sf
+		      (if sr
+			  '(hr hl s)
+			  '(s hr hl))
+		      '(hl s hr)))
+		 (dr
+		  (if sf
+		      (if sl
+			  '(hl hr s)
+			  '(s hl hr))
+		      '(hr s hl)))
+		 (dm
+		  (cond
+		    (sf '(hl hr s))
+		    (sb '(hl hr s))
+		    (sr '(hr s hl))
+		    (sl '(hl s hr))))))
+	      (dp
+	       (cond
+		 (dl
+		  (cond
+		    (sf '(hr hl s))
+		    (sb '(hl s hr))
+		    (sr '(hl s hr))
+		    (sl '(s hr hl))))
+		 (dr
+		  (cond
+		    (sf '(hl hr s))
+		    (sb '(hr s hl))
+		    (sr '(hr s hl))
+		    (sl '(hr s hl))))
+		 (t
+		  '(s))))
+	      (db
+	       (error "this should not happen db")
+	       ;; (cond
+	       ;; 	 (dl
+	       ;; 	  (if sf
+	       ;; 	      (if sl
+	       ;; 		  '(s hl hr)
+	       ;; 		  '(hr hl s))
+	       ;; 	      '(hl s hr)))
+	       ;; 	 (dr
+	       ;; 	  (if sf
+	       ;; 	      (if sr
+	       ;; 		  '(s hr hl)
+	       ;; 		  '(hl hr s))
+	       ;; 	      '(hr s hl)))
+	       ;; 	 (dm
+	       ;; 	  (cond
+	       ;; 	    (sf '(s hl hr))
+	       ;; 	    (sb '(hl hr s))
+	       ;; 	    (sr '(hr s hl))
+	       ;; 	    (sl '(hl s hr)))))
+	       ))))))
 (defun next-dirs-exit (x y dst-x dst-y dst-dir)
   (declare (ignore dst-dir))
   (cond
@@ -283,12 +310,13 @@
     (1
      `(,step))))
 
-(defun safe-pos-p (x y a step plane-type dst-x dst-y dst-type)
+(defun safe-pos-p (x y a step plane-type dst-x dst-y dst-type dir dst-dir)
   (if (and (= x dst-x)
 	   (= y dst-y)
 	   (ecase dst-type
 	     (exit (= a 9))
-	     (airport (= a 1))))
+	     (airport (and (= a 1)
+			   (eq dir dst-dir)))))
       t
       (if (and
 	   (if (> step 0)
@@ -449,15 +477,12 @@
 		(loop
 		   for deta-a in (next-a a dst-type)
 		   for p = (loop
-			      for i in (if (and (eq dst-type 'airport)
-						(member old-dir '(1 3 5 7)))
-					   (fix-dir)
-					   (next-dirs a x y old-dir dst-x dst-y dst-dir dst-type))
+			      for i in (next-dirs a x y old-dir dst-x dst-y dst-dir dst-type)
 			      for d = (elt (deta-xy) i)
 			      for deta-x = (car d)
 			      for deta-y = (cadr d)
 			      with p = nil
-			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) (1+ step) plane-type dst-x dst-y dst-type))
+			      if (and (<= 0 (+ deta-a a) 9) (good-dir-p old-dir i) (safe-pos-p (+ x deta-x) (+ y deta-y) (+ a deta-a) (1+ step) plane-type dst-x dst-y dst-type i dst-dir))
 			      do (setf p (dfs (+ x deta-x) (+ y deta-y) (+ a deta-a) path dst-type dst-x dst-y dst-dir (1- fuel) i (1+ step) plane-type))
 			      until p
 			      finally (return p))
@@ -507,7 +532,7 @@
 	 (dst-x (car dst))
 	 (dst-y (cadr dst))
 	 (dst-dir (dir->num (caddr dst))))
-    (if (safe-pos-p x y a step plane-type dst-x dst-y dst-type)
+    (if (safe-pos-p x y a step plane-type dst-x dst-y dst-type dir dst-dir)
 	(let ((p (dfs x y a (make-list step) dst-type dst-x dst-y dst-dir fuel dir step plane-type)))
 	  (if mark
 	      (mark-path p plane-type)
@@ -624,7 +649,7 @@
       ""
       (let ((diff-time
 	     (time->step time1 plane-type)))
-	(if (ignore-errors (car (action actions diff-time)))
+	(if (car (action actions diff-time))
 	    (format nil "~aa~a~%~at~a~%"
 		    (plane-num->plane-name plane-num) (cadr (action actions diff-time))
 		    (plane-num->plane-name plane-num) (car (action actions diff-time)))
@@ -735,11 +760,15 @@
 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	 do (setf *infos* infos) and
 	 do (setf *base-time* time) and
-	 do (ignore-errors (with-timeout (0.03)
-			     (ct-count *ct* (calculate-paths infos)))) and
+	 do (handler-case
+		(with-timeout (0.03)
+		  (ct-count *ct* (calculate-paths infos)))
+	      (timeout-error nil)) and
 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
-	 do (ignore-errors (with-timeout (0.03)
-			     (ct-count *ct* (calculate-paths (sort-by-previous-calculating-result infos))))) and
+	 do (handler-case
+		(with-timeout (0.03)
+		  (ct-count *ct* (calculate-paths (sort-by-previous-calculating-result infos))))
+	      (timeout-error nil)) and
 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	 do (loop
 	       for i from 0
@@ -747,12 +776,13 @@
 	       do (error "time out")
 	       until (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	       do (incf count)
-	       do (ignore-errors
-		    (with-timeout (0.03)
-		      (setf infos (shuffle-sort-infos infos))
-		      (ct-count *ct* (calculate-paths infos))
-		      ;; (calculate-paths infos)
-		      (setf *infos* infos))))
+	       do (handler-case
+		      (with-timeout (0.03)
+			(setf infos (shuffle-sort-infos infos))
+			(ct-count *ct* (calculate-paths infos))
+			;; (calculate-paths infos)
+			(setf *infos* infos))
+		    (timeout-error nil)))
 	 do (format log "[~a]~%"  (file-write-date "/dev/shm/a"))
 	 do (format log "~a~%~a~%" *base-time* (hash-table-plist *planes*))
 	 do (loop
@@ -762,7 +792,6 @@
 	       do (princ (princ (ct-count *ct* (next-action plane-num actions (plane-type infos plane-num) time))
 				out)
 			 log))
-	 do (with-timeout (0.2)
-	      (ct-count *ct* (finish-output out)))
+	 do (ct-count *ct* (finish-output out))
 	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (setf end (get-internal-real-time)))
 	 do (ct-count *ct* (force-output log))))))
