@@ -697,7 +697,7 @@
 	 (y (nth 2 (cadr info)))
 	 (a (nth 3 (cadr info))))
     (loop for time in (step->times 0 plane-type)
-	 do (map-set x y a time))))
+	 do (map-clr x y a time))))
 (defun mark-all-flying-planes (&optional (infos *infos*))
   (loop
      for info in (cdr infos)
