@@ -620,17 +620,16 @@
     (1
      (- now *base-time*))))
 (defun next-action (plane-num actions plane-type time1)
-  (let ((diff-time
-	 (time->step time1 plane-type)
-	  ;; (ecase plane-type
-	  ;;   (0 (truncate (- time1 time2) 2))
-	  ;;   (1 (- time1 time2)))
-	  ))
-    (if (ignore-errors (car (action actions diff-time)))
-	(format nil "~aa~a~%~at~a~%"
-		(plane-num->plane-name plane-num) (cadr (action actions diff-time))
-		(plane-num->plane-name plane-num) (car (action actions diff-time)))
-	(format nil "~aa0~%" (plane-num->plane-name plane-num)))))
+  (if (and (evenp time1) (= plane-type 0))
+      ""
+      (let ((diff-time
+	     (time->step time1 plane-type)))
+	(if (ignore-errors (car (action actions diff-time)))
+	    (format nil "~aa~a~%~at~a~%"
+		    (plane-num->plane-name plane-num) (cadr (action actions diff-time))
+		    (plane-num->plane-name plane-num) (car (action actions diff-time)))
+	    ;; (format nil "~aa0~%" (plane-num->plane-name plane-num))
+	    ""))))
 (defun mark-plane (plane-num &optional infos)
   (unless infos
     (setf infos *infos*))
@@ -691,6 +690,15 @@
 		     (if (/= (cadr x) (cadr y))
 			 (> (cadr x) (cadr y))
 			 (< (caddr x) (caddr y))))))))
+(defun sort-by-previous-calculating-result (&optional (infos *infos*) (planes *planes*))
+  (let ((time (car infos))
+	(planes-info (cdr infos)))
+    (append (list time)
+	    (sort planes-info
+		  (lambda (x y)
+		    (declare (ignore y))
+		    (unless (gethash (car x) planes)
+		      t))))))
 (defun shuffle-sort-infos (infos)
   (let ((time (car infos))
 	(planes (cdr infos)))
@@ -718,7 +726,7 @@
       (loop
 	 with start and end
 	 with count = 0
-	 for infos = (progn (wait-until-modify in-file) (sleep 0.1) (setf start (get-internal-real-time)) (ct-count *ct* (get-infos in-file)))
+	 for infos = (progn (wait-until-modify in-file) (setf start (get-internal-real-time)) (ct-count *ct* (get-infos in-file)))
 
 	 ;; for infos = (sort-by-planes-shortest-reach-time 
 	 ;; 	      (progn (wait-until-modify in-file) (get-infos in-file)))
@@ -727,11 +735,15 @@
 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	 do (setf *infos* infos) and
 	 do (setf *base-time* time) and
-	 do (ignore-errors (with-timeout (0.05)
+	 do (ignore-errors (with-timeout (0.03)
 			     (ct-count *ct* (calculate-paths infos)))) and
+	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
+	 do (ignore-errors (with-timeout (0.03)
+			     (ct-count *ct* (calculate-paths (sort-by-previous-calculating-result infos))))) and
+	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	 do (loop
 	       for i from 0
-	       if (> i 10)
+	       if (> i 20)
 	       do (error "time out")
 	       until (ct-count *ct* (every-plane-has-its-path *planes* infos time))
 	       do (incf count)
