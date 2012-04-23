@@ -1,4 +1,4 @@
-(setf *game*
+(setf cfy.atc-bot:*game*
       '(30
 	21
 	(( 29  7 a ) ( 29 17 a )
