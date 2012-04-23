@@ -4,7 +4,7 @@
   (:use :cl :alexandria :inotify :trivial-timeout :ct))
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
-(defparameter *max-time* 100)
+(defparameter *max-time* 420)
 (defvar *infos* nil)
 (defvar *planes* nil)
 (defvar *base-time* nil)
