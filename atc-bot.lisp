@@ -800,7 +800,7 @@
 				out)
 			 log))
 	 do (with-timeout (0.35)) (ct-count *ct* (finish-output out))
-	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (setf end (get-internal-real-time)))
+	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (get-internal-real-time))
 	 do (ct-count *ct* (force-output log))))))
 (defun main-func ()
   (let ((game
@@ -812,7 +812,7 @@
   (setf *base-time* 0 *planes* nil)
   (with-open-file (log "atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
     (loop
-       with start and end
+       with start
        with count = 0
        with in-file = "atc-out"
        for infos = (progn (wait-until-modify in-file) (setf start (get-internal-real-time)) (get-infos in-file))
@@ -856,5 +856,5 @@
 			      *standard-output*)
 		       log))
        do (with-timeout (0.35)) (finish-output *standard-output*)
-       do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (setf end (get-internal-real-time)))
+       do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (get-internal-real-time))
        do (force-output log))))
