@@ -1,4 +1,4 @@
-(declaim (optimize (debug 3)))
+(declaim (optimize (speed 3)))
 
 (defpackage :cfy.atc-bot
   (:use :cl :alexandria :inotify :trivial-timeout :ct)
@@ -756,7 +756,7 @@
   (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
       (loop
-	 with start and end
+	 with start
 	 with count = 0
 	 for infos = (progn (wait-until-modify in-file) (setf start (get-internal-real-time)) (ct-count *ct* (get-infos in-file)))
 
@@ -790,7 +790,7 @@
 			;; (calculate-paths infos)
 			(setf *infos* infos))
 		    (timeout-error nil)))
-	 do (format log "[~a]~%"  (file-write-date "/dev/shm/a"))
+	 do (format log "[~a]~%"  (file-write-date in-file))
 	 do (format log "~a~%~a~%" *base-time* (hash-table-plist *planes*))
 	 do (loop
 	       for plane-num in (get-plane-nums infos)
@@ -800,7 +800,7 @@
 				out)
 			 log))
 	 do (with-timeout (0.35)) (ct-count *ct* (finish-output out))
-	 do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (get-internal-real-time))
+	 do (format log "[~a]~%~a~%~%"  (file-write-date in-file) (get-internal-real-time))
 	 do (ct-count *ct* (force-output log))))))
 (defun main-func ()
   (let ((game
@@ -846,7 +846,7 @@
 		      (calculate-paths infos)
 		      (setf *infos* infos))
 		  (timeout-error nil)))
-       do (format log "[~a]~%"  (file-write-date "/dev/shm/a"))
+       do (format log "[~a]~%"  (file-write-date in-file))
        do (format log "~a~%~a~%" *base-time* (hash-table-plist *planes*))
        do (loop
 	     for plane-num in (get-plane-nums infos)
@@ -856,5 +856,5 @@
 			      *standard-output*)
 		       log))
        do (with-timeout (0.35)) (finish-output *standard-output*)
-       do (format log "[~a]~%~a~%~%"  (file-write-date "/dev/shm/a") (get-internal-real-time))
+       do (format log "[~a]~%~a~%~%"  (file-write-date in-file) (get-internal-real-time))
        do (force-output log))))
