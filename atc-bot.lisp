@@ -753,7 +753,7 @@
 	 (funcall ,do-some-thing ,var)))))
 (defun main (in-file out-file)
   (setf *base-time* 0 *planes* nil *ct* (ct-init))
-  (with-open-file (log "/dev/shm/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
+  (with-open-file (log "/tmp/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
       (loop
 	 with start
