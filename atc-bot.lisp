@@ -13,6 +13,8 @@
 (defvar *map* nil)
 (defvar *ct* nil)
 (defvar *far-distance* 10)
+
+(setf (symbol-function 's) (symbol-function 'shuffle))
 (defun deta-xy ()
   #(
     (0 -1)				;0
@@ -204,14 +206,14 @@
   (declare (type fixnum x y dst-x dst-y dst-dir))
   (declare (ignore dst-dir))
   (cond
-    ((and (> dst-x x) (> dst-y y)) '(3 4 2 5 1 0 6 7))
-    ((and (> dst-x x) (= dst-y y)) '(2 3 1 4 0 5 7 6))
-    ((and (> dst-x x) (< dst-y y)) '(1 2 0 3 7 4 6 5))
-    ((and (= dst-x x) (> dst-y y)) '(4 5 3 6 2 7 1 0))
-    ((and (= dst-x x) (< dst-y y)) '(0 1 7 2 6 3 5 4))
-    ((and (< dst-x x) (> dst-y y)) '(5 6 4 7 3 0 2 1))
-    ((and (< dst-x x) (= dst-y y)) '(6 7 5 0 4 1 3 2))
-    ((and (< dst-x x) (< dst-y y)) '(7 0 6 1 5 2 4 3))))
+    ((and (> dst-x x) (> dst-y y)) `(3 ,@(s '(4 2)) ,@(s '(5 1)) ,@(s '(0 6)) 7))
+    ((and (> dst-x x) (= dst-y y)) `(2 ,@(s '(3 1)) ,@(s '(4 0)) ,@(s '(5 7)) 6))
+    ((and (> dst-x x) (< dst-y y)) `(1 ,@(s '(2 0)) ,@(s '(3 7)) ,@(s '(4 6)) 5))
+    ((and (= dst-x x) (> dst-y y)) `(4 ,@(s '(5 3)) ,@(s '(6 2)) ,@(s '(7 1)) 0))
+    ((and (= dst-x x) (< dst-y y)) `(0 ,@(s '(1 7)) ,@(s '(2 6)) ,@(s '(3 5)) 4))
+    ((and (< dst-x x) (> dst-y y)) `(5 ,@(s '(6 4)) ,@(s '(7 3)) ,@(s '(0 2)) 1))
+    ((and (< dst-x x) (= dst-y y)) `(6 ,@(s '(7 5)) ,@(s '(0 4)) ,@(s '(1 3)) 2))
+    ((and (< dst-x x) (< dst-y y)) `(7 ,@(s '(0 6)) ,@(s '(1 5)) ,@(s '(2 4)) 3))))
 (defun good-dir-p (old-dir new-dir)
   (declare (type fixnum old-dir new-dir))
   (if (or
