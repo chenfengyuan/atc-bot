@@ -609,6 +609,7 @@
 			(mark-path v (plane-type infos k) base-time))
 		      planes))
       (setf planes (make-hash-table :test #'equalp)))
+  (unmark-destination)
   (loop
      for plane in (cdr infos)
      for num = (car plane)
