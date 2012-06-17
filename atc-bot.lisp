@@ -176,8 +176,8 @@
 		  (cond
 		    (sf '(hl hr s))
 		    (sb '(hr s hl))
-		    (sr '(hr s hl))
-		    (sl '(hr s hl))))
+		    (sr '(s hr hl))
+		    (sl '(s hl hr))))
 		 (t
 		  '(s))))
 	      (db
