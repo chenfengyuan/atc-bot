@@ -12,7 +12,7 @@
 ;; (defvar *actions* (make-hash-table))
 (defvar *map* nil)
 (defvar *ct* nil)
-(defvar *far-distance* 10)
+(defvar *far-distance* 7)
 
 (setf (symbol-function 's) (symbol-function 'shuffle))
 (defun deta-xy ()
