@@ -655,8 +655,10 @@
 	(dolist (num (get-plane-nums infos) t)
 	  (if (gethash num planes)
 	      (let ((pos (nth (time->step time base-time (plane-type infos num)) (gethash num planes))))
-		(if (or (null pos)
-			(not (equalp pos (plane-pos infos num))))
+		(if (or
+		     (>= (time->step time base-time (plane-type infos num)) (1- (length (gethash num planes))))
+		     (not (or (= 0 (caddr (plane-pos infos num)))
+			      (equalp pos (plane-pos infos num)))))
 		    (push num r)))
 	      (push num r)))
 	(if r
@@ -831,7 +833,7 @@
 	 do (format log "~a~%~a~%" (get-internal-real-time) infos)
 	 unless (every-plane-has-its-path planes infos time base-time)
 	 do (handler-case
-		(with-timeout (0.1)
+		(with-timeout (0.3)
 		  (setf planes (trim-planes (remove-finish-planes planes infos time base-time)
 					    infos time base-time)
 			base-time time
