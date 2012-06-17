@@ -615,7 +615,7 @@
      for num = (car plane)
      for info = (cadr plane)
      unless (gethash num planes)
-     do (format t "~a " num) and
+     ;; do (format t "~a " num) and
      do (unmark-plane num infos base-time) and
      do (setf (gethash num planes)
 	      (if (= 0 (plane-a info))
