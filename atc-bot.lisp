@@ -840,11 +840,12 @@
 		  (setf planes (trim-planes (remove-finish-planes planes infos time base-time)
 					    infos time base-time)
 			base-time time
-			planes (calculate-paths infos planes base-time))))
+			planes (calculate-paths infos planes base-time)))
+	      (timeout-error nil))
 	 unless (every-plane-has-its-path planes infos time base-time)
 	 ;; do (setf infos (sort-by-if-at-exist infos *game*)) and
 	 do (handler-case
-	 	(with-timeout (0.7)
+	 	(with-timeout (0.6)
 	 	  (setf	base-time time
 	 		planes (calculate-paths infos nil base-time))))
 	 unless (every-plane-has-its-path planes infos time base-time)
