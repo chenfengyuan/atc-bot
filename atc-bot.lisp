@@ -2,7 +2,7 @@
 
 (defpackage :cfy.atc-bot
   (:use :cl :alexandria :inotify :trivial-timeout :ct)
-  (:export :main-func :*game*))
+  (:export :plane-pos :get-plane-nums :get-infos :calculate-paths :plane-type))
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
 (defparameter *max-time* 420)
@@ -834,22 +834,26 @@
 			    (get-infos in-file))
 	 for time = (car infos)
 	 do (format log "~a~%~a~%" (get-internal-real-time) infos)
-	 unless (every-plane-has-its-path planes infos time base-time)
+	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
 	 do (handler-case
 		(with-timeout (0.3)
-		  (setf planes (trim-planes (remove-finish-planes planes infos time base-time)
-					    infos time base-time)
+		  (setf planes (trim-planes (remove-finish-planes planes (copy-list infos) time base-time)
+					    (copy-list infos) time base-time)
 			base-time time
-			planes (calculate-paths infos planes base-time)))
+			planes (calculate-paths (copy-list infos) planes base-time)))
 	      (timeout-error nil))
-	 unless (every-plane-has-its-path planes infos time base-time)
+	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
 	 ;; do (setf infos (sort-by-if-at-exist infos *game*)) and
 	 do (handler-case
 	 	(with-timeout (0.6)
 	 	  (setf	base-time time
-	 		planes (calculate-paths infos nil base-time))))
-	 unless (every-plane-has-its-path planes infos time base-time)
+	 		planes (calculate-paths (copy-list infos) nil base-time))))
+	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
 	 do (error "not all have path")
+	 do (av:make-map *game* infos (trim-planes (remove-finish-planes planes (copy-list infos) time base-time) (copy-list infos) time base-time)
+			 (format nil "/dev/shm/atc/atc-~a.png" time))
+	 do (progn
+	      #+sbcl (sb-ext:run-program "ln" (list "-fs" (format nil "/dev/shm/atc/atc-~a.png" time) "/dev/shm/atc.png") :search t))
 	 do (loop
 	       for plane-num in (get-plane-nums infos)
 	       for actions = (gethash plane-num planes)
@@ -870,110 +874,3 @@
        for actions = (gethash plane-num planes)
        if actions
        do (princ (next-action plane-num actions (plane-type infos plane-num) time time)))))
-;; (defun main (in-file out-file)
-;;   (setf *base-time* 0 *planes* nil *ct* (ct-init))
-;;   (with-open-file (log "/tmp/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
-;;     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
-;;       (loop
-;; 	 with start
-;; 	 with count = 0
-;; 	 for infos = (progn (wait-until-modify in-file) (setf start (get-internal-real-time)) (ct-count *ct* (get-infos in-file)))
-
-;; 	 ;; for infos = (sort-by-planes-shortest-reach-time 
-;; 	 ;; 	      (progn (wait-until-modify in-file) (get-infos in-file)))
-;; 	 for time = (car infos)
-;; 	 do (format log "~a~%~a~%" start infos)
-;; 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
-;; 	 do (setf *infos* infos) and
-;; 	 do (setf *base-time* time) and
-;; 	 do (handler-case
-;; 		(with-timeout (0.03)
-;; 		  (ct-count *ct* (calculate-paths infos)))
-;; 	      (timeout-error nil)) and
-;; 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
-;; 	 do (handler-case
-;; 		(with-timeout (0.03)
-;; 		  (ct-count *ct* (calculate-paths (sort-by-previous-calculating-result infos))))
-;; 	      (timeout-error nil)) and
-;; 	 unless (ct-count *ct* (every-plane-has-its-path *planes* infos time))
-;; 	 do (loop
-;; 	       for i from 0
-;; 	       if (> i 20)
-;; 	       do (error "time out")
-;; 	       until (ct-count *ct* (every-plane-has-its-path *planes* infos time))
-;; 	       do (incf count)
-;; 	       do (handler-case
-;; 		      (with-timeout (0.03)
-;; 			(setf infos (shuffle-sort-infos infos))
-;; 			(ct-count *ct* (calculate-paths infos))
-;; 			;; (calculate-paths infos)
-;; 			(setf *infos* infos))
-;; 		    (timeout-error nil)))
-;; 	 do (format log "[~a]~%"  (file-write-date in-file))
-;; 	 do (format log "~a~%~a~%" *base-time* (hash-table-plist *planes*))
-;; 	 do (loop
-;; 	       for plane-num in (get-plane-nums infos)
-;; 	       for actions = (gethash plane-num *planes*)
-;; 	       if actions
-;; 	       do (princ (princ (ct-count *ct* (next-action plane-num actions (plane-type infos plane-num) time))
-;; 				out)
-;; 			 log))
-;; 	 do (with-timeout (0.35)) (ct-count *ct* (finish-output out))
-;; 	 do (format log "[~a]~%~a~%~%"  (file-write-date in-file) (get-internal-real-time))
-;; 	 do (ct-count *ct* (force-output log))))))
-;; (defun main-func ()
-;;   (let ((game
-;; 	 #+sbcl
-;; 	  (cadr sb-ext:*posix-argv*)
-;; 	  #-sbcl
-;; 	  (error "don't supply this implemention")))
-;;     (load game))
-;;   (setf *base-time* 0 *planes* nil)
-;;   (with-open-file (log "atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
-;;     (loop
-;;        with start
-;;        with count = 0
-;;        with in-file = "atc-out"
-;;        for infos = (progn (wait-until-modify in-file) (setf start (get-internal-real-time)) (get-infos in-file))
-
-;;        ;; for infos = (sort-by-planes-shortest-reach-time 
-;;        ;; 	      (progn (wait-until-modify in-file) (get-infos in-file)))
-;;        for time = (car infos)
-;;        do (format log "~a~%~a~%" start infos)
-;;        unless (every-plane-has-its-path *planes* infos time)
-;;        do (setf *infos* infos) and
-;;        do (setf *base-time* time) and
-;;        do (handler-case
-;; 	      (with-timeout (0.03)
-;; 		(calculate-paths infos))
-;; 	    (timeout-error nil)) and
-;;        unless (every-plane-has-its-path *planes* infos time)
-;;        do (handler-case
-;; 	      (with-timeout (0.03)
-;; 		(calculate-paths (sort-by-previous-calculating-result infos)))
-;; 	    (timeout-error nil)) and
-;;        unless (every-plane-has-its-path *planes* infos time)
-;;        do (loop
-;; 	     for i from 0
-;; 	     if (> i 20)
-;; 	     do (error "time out")
-;; 	     until (every-plane-has-its-path *planes* infos time)
-;; 	     do (incf count)
-;; 	     do (handler-case
-;; 		    (with-timeout (0.03)
-;; 		      (setf infos (shuffle-sort-infos infos))
-;; 		      (calculate-paths infos)
-;; 		      (setf *infos* infos))
-;; 		  (timeout-error nil)))
-;;        do (format log "[~a]~%"  (file-write-date in-file))
-;;        do (format log "~a~%~a~%" *base-time* (hash-table-plist *planes*))
-;;        do (loop
-;; 	     for plane-num in (get-plane-nums infos)
-;; 	     for actions = (gethash plane-num *planes*)
-;; 	     if actions
-;; 	     do (princ (princ (next-action plane-num actions (plane-type infos plane-num) time)
-;; 			      *standard-output*)
-;; 		       log))
-;;        do (with-timeout (0.35)) (finish-output *standard-output*)
-;;        do (format log "[~a]~%~a~%~%"  (file-write-date in-file) (get-internal-real-time))
-;;        do (force-output log))))
