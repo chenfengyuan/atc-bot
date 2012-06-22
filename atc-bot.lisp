@@ -1,7 +1,7 @@
 (declaim (optimize (debug 3) (speed 1) (compilation-speed 3)))
 
 (defpackage :cfy.atc-bot
-  (:use :cl :alexandria :inotify :trivial-timeout :ct)
+  (:use :cl :alexandria :inotify :trivial-timeout :ct :cl-heap)
   (:export :plane-pos :get-plane-nums :get-infos :calculate-paths :plane-type))
 (in-package :cfy.atc-bot)
 (defvar *game* nil)
@@ -13,7 +13,7 @@
 (defvar *map* nil)
 (defvar *ct* nil)
 (defvar *far-distance* 7)
-
+(defvar *max-step* 50)
 (setf (symbol-function 's) (symbol-function 'shuffle))
 (defun deta-xy ()
   #(
@@ -222,8 +222,8 @@
       t))
 (defun good-pos-p (x y)
   (declare (type fixnum x y))
-  (and (< -1 x (car *game*))
-       (< -1 y (cadr *game*))
+  (and (< 0 x (car *game*))
+       (< 0 y (cadr *game*))
        (aref *map* x y 0)))
 (defun next-a-exit (a distance)
   (declare (type fixnum a))
@@ -344,10 +344,11 @@
 	   (= y dst-y)
 	   (ecase dst-type
 	     (exit (= a 9))
-	     (airport (and (= a 1)
+	     (airport (and (= a 0)
 			   (eq dir dst-dir)))))
       t
       (if (and
+	   (> a 0)
 	   (if (> step 0)
 	       (and (< 0 x (1- (car *game*)))
 		    (< 0 y (1- (cadr *game*))))
@@ -825,52 +826,214 @@
 				 value)))
 		 planes)
 	planes-new)))
-(defun main (in-file out-file &optional break-time)
-  (with-open-file (log "/tmp/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
-    (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
-      (loop
-	 with base-time = 0 and planes
-	 for infos = (progn (wait-until-modify in-file)
-			    (get-infos in-file))
-	 for time = (car infos)
-	 do (format log "~a~%~a~%" (get-internal-real-time) infos)
-	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
-	 do (handler-case
-		(with-timeout (0.3)
-		  (setf planes (trim-planes (remove-finish-planes planes (copy-list infos) time base-time)
-					    (copy-list infos) time base-time)
-			base-time time
-			planes (calculate-paths (copy-list infos) planes base-time)))
-	      (timeout-error nil))
-	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
-	 ;; do (setf infos (sort-by-if-at-exist infos *game*)) and
-	 do (handler-case
-	 	(with-timeout (0.6)
-	 	  (setf	base-time time
-	 		planes (calculate-paths (copy-list infos) nil base-time))))
-	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
-	 do (error "not all have path")
-	 do (av:make-map *game* infos (trim-planes (remove-finish-planes planes (copy-list infos) time base-time) (copy-list infos) time base-time)
-			 (format nil "/dev/shm/atc/atc-~a.png" time))
-	 do (progn
-	      #+sbcl (sb-ext:run-program "ln" (list "-fs" (format nil "/dev/shm/atc/atc-~a.png" time) "/dev/shm/atc.png") :search t))
-	 do (loop
-	       for plane-num in (get-plane-nums infos)
-	       for actions = (gethash plane-num planes)
-	       if actions
-	       do (princ (princ (next-action plane-num actions (plane-type infos plane-num) time base-time)
-				out) log))
-	 do (finish-output out)
-	 do (finish-output log)
-	 if (equalp break-time time)
-	 do (error "break-time")))))
-(defun test ()
-  (let*
-      ((infos (get-infos "/dev/shm/atc-out"))
-       (planes (calculate-paths infos nil (car infos)))
-       (time (car infos)))
+
+(defun make-a*-map (max-step type &key width height game)
+  (if game
+      (setf width (car game)
+	    height (cadr game)))
+  (make-array (list width height max-step 8 10) :element-type type))
+(defun available-dirs (pre-dir)
+  (loop for i from -2 to 2
+      collect (mod (+ pre-dir i) 8)))
+(defun dirs->xys (x y dirs)
+  (loop for i in (dirs->deta-xys dirs)
+       collect (list (+ x (car i)) (+ y (cadr i)))))
+(defun available-altitude (pre-a)
+  (cond
+    ((< 0 pre-a 9) (list (1- pre-a) pre-a (1+ pre-a)))
+    ((= pre-a 0) '(1))
+    ((= pre-a 9) '(8 9))))
+(defun available-neighbors (x y dir a)
+  (let* ((dirs (available-dirs dir))
+	 (as (available-altitude a)))
     (loop
-       for plane-num in (get-plane-nums infos)
-       for actions = (gethash plane-num planes)
-       if actions
-       do (princ (next-action plane-num actions (plane-type infos plane-num) time time)))))
+       with r
+       for dir in (dirs->xys x y dirs)
+       for i from 0
+       for x = (car dir)
+       for y = (cadr dir)
+       do (loop for a in as
+	     do (push (list x y (nth i dirs) a) r))
+       finally (return r))))
+(defun a*-h (x y dir a dst-x dst-y dst-dir dst-type fuel)
+  (declare (ignore fuel dir dst-dir))
+  (let ((dst-a (ecase dst-type
+		 (exit 9)
+		 (airport 0)))
+	(cost (max (abs (- x dst-x))
+		   (abs (- y dst-y)))))
+    (if (> (abs (- dst-a a)) cost)
+	(setf cost (1+ (abs (- dst-a a)))))
+    cost))
+(defun movement-cost (from-x from-y to-x to-y)
+  (max (abs (- from-x to-x))
+       (abs (- from-y to-y))))
+
+(defun f-set (f-map x y step dir a f)
+  (setf (aref f-map x y step dir a) f))
+(defun f-get (f-map x y step dir a)
+  (aref f-map x y step dir a))
+(defun g-set (g-map x y step dir a g)
+  (setf (aref g-map x y step dir a) g))
+(defun g-get (g-map x y step dir a)
+  (aref g-map x y step dir a))
+(defun p-mark (mark-map x y step dir a val)
+  (setf (aref mark-map x y step dir a) (1+ val)))
+(defun p-unmark (mark-map x y step dir a)
+  (setf (aref mark-map x y step dir a) 0))
+(defun p-markp (mark-map x y step dir a)
+  (< 0 (aref mark-map x y step dir a)))
+(defun p-mark-value (mark-map x y step dir a)
+  (1- (aref mark-map x y step dir a)))
+(defun set-parent (parents-map x y step dir a pre-x pre-y pre-dir pre-a)
+  (setf (aref parents-map x y step dir a) (list pre-x pre-y pre-dir pre-a)))
+(defun get-parent (parents-map x y step dir a)
+  (aref parents-map x y step dir a))
+
+(defun add-p-to-heap (f-map g-map mark-map parents-map x y step dir a f g heap pre-x pre-y pre-dir pre-a)
+  (f-set f-map x y step dir a f)
+  (g-set g-map x y step dir a g)
+  (p-mark mark-map x y step dir a (nth-value
+				   1
+				   (add-to-heap heap (list f x y step dir a))))
+  (set-parent parents-map x y step dir a pre-x pre-y pre-dir pre-a))
+(defun pop-p-from-heap (mark-map heap)
+  (let* ((p (pop-heap heap))
+	 (x (nth 1 p))
+	 (y (nth 2 p))
+	 (step (nth 3 p))
+	 (dir (nth 4 p))
+	 (a (nth 5 p)))
+    (when p
+	(p-unmark mark-map x y step dir a))
+    p))
+(defun delete-p-from-heap (mark-map x y step dir a heap)
+  (let ((i (p-mark-value mark-map x y step dir a)))
+    (delete-from-heap heap i)))
+;; (defun search-dfs (plane-type x y a dst-n dst-type fuel dir step mark-path base-time)
+(defun is-dst-p (x y dir a dst-x dst-y dst-dir dst-type)
+  (ecase dst-type
+    (exit
+     (and
+      (= x dst-x)
+      (= y dst-y)
+      (= a 9)))
+    (airport
+     (and
+      (= x dst-x)
+      (= y dst-y)
+      (= a 0)
+      (= dir dst-dir)))))
+(defun remove-neighbors (neighbors step plane-type dst-x dst-y dst-type dst-dir base-time)
+  (remove-if-not (lambda (p)
+		   (let ((x (nth 0 p))
+			 (y (nth 1 p))
+			 (dir (nth 2 p))
+			 (a (nth 3 p)))
+		     (safe-pos-p x y a step plane-type dst-x dst-y dst-type dir dst-dir base-time)))
+		 neighbors))
+(defun a*-construct-path (parents-map x y step dir a)
+  (let (path)
+    (push (list x y a) path)
+    (do
+     ((p (get-parent parents-map x y step dir a) (get-parent parents-map x y step dir a)))
+     ((= 42 (nth 3 p)) path)
+      (setf x (nth 0 p)
+	    y (nth 1 p)
+	    dir (nth 2 p)
+	    a (nth 3 p)
+	    step (1- step))
+      (push (list x y a) path))))
+(defun a* (x y dir a dst-x dst-y dst-dir dst-type fuel plane-type base-time base-step &optional make-map)
+  (when make-map (make-map))
+  (let ((heap (make-instance 'binary-heap :key 'car))
+	(parents-map (make-a*-map *max-step* t :game *game*))
+	(f-map (make-a*-map *max-step* '(unsigned-byte 32) :game *game*))
+	(mark-map (make-a*-map *max-step* '(unsigned-byte 32) :game *game*))
+	(g-map (make-a*-map *max-step* '(unsigned-byte 32) :game *game*)))
+    (add-p-to-heap f-map g-map mark-map parents-map x y 0 dir a (a*-h x y dir a dst-x dst-y dst-dir dst-type fuel) 0 heap x y dir 42)
+    (do
+     ((p (pop-p-from-heap mark-map heap) (pop-p-from-heap mark-map heap))
+      r
+      findp
+      (count 0 (1+ count)))
+     (findp r)
+      (let ((pre-x (nth 1 p))
+	    (pre-y (nth 2 p))
+	    (pre-step (nth 3 p))
+	    (pre-dir (nth 4 p))
+	    (pre-a (nth 5 p)))
+	;; (setf r (remove-neighbors (available-neighbors pre-x pre-y pre-dir pre-a)
+	;; 			  (1+ pre-step) plane-type dst-x dst-y dst-type dst-dir base-time))
+	(dolist (p (remove-neighbors (available-neighbors pre-x pre-y pre-dir pre-a)
+				     (+ base-step (1+ pre-step)) plane-type dst-x dst-y dst-type dst-dir base-time))
+	  (let* ((x (nth 0 p))
+		 (y (nth 1 p))
+		 (dir (nth 2 p))
+		 (a (nth 3 p))
+		 (step (1+ pre-step))
+		 (g (1+ (g-get g-map pre-x pre-y pre-step pre-dir pre-a)))
+		 (h (a*-h x y dir a dst-x dst-y dst-dir dst-type fuel))
+		 (f (+ g (* 2 h))))
+	    (if (is-dst-p x y dir a dst-x dst-y dst-dir dst-type)
+		(progn
+		  (set-parent parents-map x y step dir a pre-x pre-y pre-dir pre-a)
+		  (setf findp t r (a*-construct-path parents-map x y step dir a)))
+		(progn
+		  (when (or (= 0 (f-get f-map x y step dir a))
+			    (< f (f-get f-map x y step dir a)))
+		    (when (p-markp mark-map x y step dir a)
+		      (delete-p-from-heap mark-map x y step dir a heap)))
+		  (unless (p-markp mark-map x y step dir a)
+		    (add-p-to-heap f-map g-map mark-map parents-map x y step dir a f g heap pre-x pre-y pre-dir pre-a))))))
+	))))
+
+;; (defun main (in-file out-file &optional break-time)
+;;   (with-open-file (log "/tmp/atc-log" :direction :output :if-exists :supersede :if-does-not-exist :create)
+;;     (with-open-file (out out-file :direction :output :if-exists :append :if-does-not-exist :create :external-format :latin-1)
+;;       (loop
+;; 	 with base-time = 0 and planes
+;; 	 for infos = (progn (wait-until-modify in-file)
+;; 			    (get-infos in-file))
+;; 	 for time = (car infos)
+;; 	 do (format log "~a~%~a~%" (get-internal-real-time) infos)
+;; 	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
+;; 	 do (handler-case
+;; 		(with-timeout (0.3)
+;; 		  (setf planes (trim-planes (remove-finish-planes planes (copy-list infos) time base-time)
+;; 					    (copy-list infos) time base-time)
+;; 			base-time time
+;; 			planes (calculate-paths (copy-list infos) planes base-time)))
+;; 	      (timeout-error nil))
+;; 	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
+;; 	 ;; do (setf infos (sort-by-if-at-exist infos *game*)) and
+;; 	 do (handler-case
+;; 	 	(with-timeout (0.6)
+;; 	 	  (setf	base-time time
+;; 	 		planes (calculate-paths (copy-list infos) nil base-time))))
+;; 	 unless (every-plane-has-its-path planes (copy-list infos) time base-time)
+;; 	 do (error "not all have path")
+;; 	 do (av:make-map *game* infos (trim-planes (remove-finish-planes planes (copy-list infos) time base-time) (copy-list infos) time base-time)
+;; 			 (format nil "/dev/shm/atc/atc-~a.png" time))
+;; 	 do (progn
+;; 	      #+sbcl (sb-ext:run-program "ln" (list "-fs" (format nil "/dev/shm/atc/atc-~a.png" time) "/dev/shm/atc.png") :search t))
+;; 	 do (loop
+;; 	       for plane-num in (get-plane-nums infos)
+;; 	       for actions = (gethash plane-num planes)
+;; 	       if actions
+;; 	       do (princ (princ (next-action plane-num actions (plane-type infos plane-num) time base-time)
+;; 				out) log))
+;; 	 do (finish-output out)
+;; 	 do (finish-output log)
+;; 	 if (equalp break-time time)
+;; 	 do (error "break-time")))))
+;; (defun test ()
+;;   (let*
+;;       ((infos (get-infos "/dev/shm/atc-out"))
+;;        (planes (calculate-paths infos nil (car infos)))
+;;        (time (car infos)))
+;;     (loop
+;;        for plane-num in (get-plane-nums infos)
+;;        for actions = (gethash plane-num planes)
+;;        if actions
+;;        do (princ (next-action plane-num actions (plane-type infos plane-num) time time)))))
